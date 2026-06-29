@@ -1,0 +1,6 @@
+{
+  "name": "Decentralized Prop Hunt",
+  "description": "A Web3-powered Prop Hunt game with IPFS asset storage, smart contract game state, and a peer-to-peer marketplace.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
