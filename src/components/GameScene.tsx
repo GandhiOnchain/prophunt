@@ -30,7 +30,7 @@ export const GameScene = memo(function GameScene() {
           <Player />
         </Physics>
         
-        <EffectComposer disableNormalPass>
+        <EffectComposer enableNormalPass={false}>
           <N8AO aoRadius={1} intensity={2} />
           <Bloom 
             intensity={0.5} 

@@ -6,6 +6,7 @@ import { PointerLockControls, useGLTF } from '@react-three/drei';
 import { useGameStore } from '../../store/gameStore';
 import { PropRegistry, PropType } from './PropModels';
 import { MAP_SIZE } from './utils';
+import { audioSystem } from './AudioSystem';
 
 // Pre-load the weapon model
 const BLASTER_URL = 'https://raw.githubusercontent.com/pmndrs/market-assets/main/files/models/blaster-a/model.gltf';
@@ -446,6 +447,7 @@ export function Player() {
       if (isHunter && e.button === 0) {
         // Hunter Shoot
         recoil.current = 1; // Trigger recoil
+        audioSystem.playShootSound();
 
         const rc = new Raycaster();
         rc.setFromCamera(new Vector2(0, 0), camera);
@@ -475,12 +477,51 @@ export function Player() {
         setTimeout(() => setTracers(prev => prev.filter(t => t.id !== tracerId)), 100);
 
         if (target) {
-          const { killPropBot, addScore, triggerHitMarker } = useGameStore.getState();
+          const { killPropBot, addScore, triggerHitMarker, setHp } = useGameStore.getState();
           if (target.userData.isPropBot) {
             killPropBot(target.userData.id);
             addScore(500);
             triggerHitMarker();
+            audioSystem.playHitSound();
+            setHp(prev => Math.min(100, prev + 15));
+            useGameStore.getState().addChatMessage(
+              `🎯 CRITICAL HIT! Eliminated Prop Bot! +15 HP`,
+              'System',
+              'SYSTEM',
+              false,
+              'global'
+            );
+          } else if (target.userData.isEnvironmentProp) {
+            audioSystem.playMisfireSound();
+            setHp(prev => {
+              const newHp = Math.max(0, prev - 8);
+              if (newHp === 0) {
+                setTimeout(() => {
+                  useGameStore.getState().setGameOver('BLASTER OVERHEATED! Weapon feedback destroyed core.');
+                }, 100);
+              }
+              return newHp;
+            });
+            useGameStore.getState().addChatMessage(
+              `⚠️ MISFIRE: Shot incorrect prop! Backlash dealt -8 HP damage.`,
+              'System',
+              'SYSTEM',
+              false,
+              'global'
+            );
           }
+        } else {
+          const { setHp } = useGameStore.getState();
+          audioSystem.playMisfireSound();
+          setHp(prev => {
+            const newHp = Math.max(0, prev - 4);
+            if (newHp === 0) {
+              setTimeout(() => {
+                useGameStore.getState().setGameOver('BLASTER OVERHEATED! Spent too much charge on vacuum.');
+              }, 100);
+            }
+            return newHp;
+          });
         }
 
       } else if (!isHunter) {
@@ -503,25 +544,11 @@ export function Player() {
             while (obj) {
               if (obj.userData?.isEnvironmentProp && obj.userData?.propType) {
                 const newProp = obj.userData.propType;
-                if (newProp !== playerPropType) {
+                 if (newProp !== playerPropType) {
                   setPlayerPropType(newProp);
                   lastPropChange.current = performance.now();
                   
-                  // Web Audio API Retro synthesizer bleep
-                  try {
-                    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-                    const osc = ctx.createOscillator();
-                    const gain = ctx.createGain();
-                    osc.connect(gain);
-                    gain.connect(ctx.destination);
-                    osc.type = 'sine';
-                    osc.frequency.setValueAtTime(350, ctx.currentTime);
-                    osc.frequency.exponentialRampToValueAtTime(700, ctx.currentTime + 0.15);
-                    gain.gain.setValueAtTime(0.08, ctx.currentTime);
-                    gain.gain.linearRampToValueAtTime(0.001, ctx.currentTime + 0.15);
-                    osc.start();
-                    osc.stop(ctx.currentTime + 0.15);
-                  } catch (e) {}
+                  audioSystem.playDisguiseSound();
 
                   // Add nice chat confirmation of disguise switch
                   useGameStore.getState().addChatMessage(
@@ -554,23 +581,17 @@ export function Player() {
         lastTaunt.current = performance.now();
         useGameStore.getState().addScore(50); // Reward for taunting
         
-        try {
-          const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-          osc.type = 'square';
-          osc.frequency.setValueAtTime(440, ctx.currentTime);
-          osc.frequency.setValueAtTime(880, ctx.currentTime + 0.1);
-          osc.frequency.setValueAtTime(440, ctx.currentTime + 0.2);
-          gain.gain.setValueAtTime(0.1, ctx.currentTime);
-          gain.gain.linearRampToValueAtTime(0.001, ctx.currentTime + 0.3);
-          osc.start();
-          osc.stop(ctx.currentTime + 0.3);
-        } catch (err) {}
+        const taunts = [
+          { name: '🔊 *WHISTLES LOUDLY*', fn: () => audioSystem.playWhistleTaunt() },
+          { name: '🔊 *RETRO CHIRP*', fn: () => audioSystem.playChirpTaunt() },
+          { name: '🔊 *PANIC ALARM*', fn: () => audioSystem.playAlarmTaunt() },
+          { name: '🔊 *SLIDE WHISTLE*', fn: () => audioSystem.playSlideTaunt() }
+        ];
+        
+        const selectedTaunt = taunts[Math.floor(Math.random() * taunts.length)];
+        selectedTaunt.fn();
 
-        useGameStore.getState().addChatMessage('*WHISTLES LOUDLY*', 'You', 'PROP', true, 'global');
+        useGameStore.getState().addChatMessage(selectedTaunt.name, 'You', 'PROP', true, 'global');
       }
     };
 

@@ -1,31 +1,39 @@
 import { Suspense, useMemo } from 'react';
 import * as THREE from 'three';
-import { useTexture } from '@react-three/drei';
+import { Environment } from '@react-three/drei';
 import { RigidBody, CuboidCollider } from '@react-three/rapier';
 import { MAP_SIZE, WALL_HEIGHT, WALL_THICKNESS } from './utils';
 
 import { useSafeTexture } from './SafeTexture';
 
-const EnvironmentMaterial = ({ textureName, repeat = 10, color = '#ffffff' }: { textureName: string, repeat?: number, color?: string }) => {
-  const diffUrl = `https://textures.polyhaven.net/file/ph-assets/Textures/jpg/1k/${textureName}/${textureName}_diff_1k.jpg`;
+const TextureMaterial = ({ textureName, repeat = [1, 1], color = '#ffffff', roughness = 0.9, metalness = 0.1 }: { textureName: string, repeat?: [number, number], color?: string, roughness?: number, metalness?: number }) => {
+  const diffUrl = `https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/${textureName}/${textureName}_diff_1k.jpg`;
+  const norUrl = `https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/${textureName}/${textureName}_nor_gl_1k.jpg`;
+  const roughUrl = `https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/${textureName}/${textureName}_rough_1k.jpg`;
   
   const diffuse = useSafeTexture(diffUrl);
+  const normal = useSafeTexture(norUrl);
+  const rough = useSafeTexture(roughUrl);
 
   useMemo(() => {
-    if (diffuse) {
-      diffuse.wrapS = diffuse.wrapT = THREE.RepeatWrapping;
-      diffuse.repeat.set(repeat, repeat);
-      diffuse.colorSpace = THREE.SRGBColorSpace;
-      diffuse.needsUpdate = true;
-    }
-  }, [diffuse, repeat]);
+    [diffuse, normal, rough].forEach((tex) => {
+      if (tex) {
+        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(repeat[0], repeat[1]);
+        tex.needsUpdate = true;
+      }
+    });
+    if (diffuse) diffuse.colorSpace = THREE.SRGBColorSpace;
+  }, [diffuse, normal, rough, repeat]);
 
   return (
     <meshStandardMaterial
       map={diffuse || undefined}
+      normalMap={normal || undefined}
+      roughnessMap={rough || undefined}
       color={color}
-      roughness={0.9}
-      metalness={0.1}
+      roughness={rough ? 1.0 : roughness}
+      metalness={metalness}
     />
   );
 };
@@ -35,6 +43,7 @@ export function MapMine() {
   return (
     <>
       <fog attach="fog" args={['#18181b', 40, 150]} />
+      <Environment files="https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/industrial_sunset_02_1k.hdr" />
       <ambientLight intensity={0.15} color="#fed7aa" />
       {/* Point lights for mine lamps */}
       <pointLight position={[0, 10, 0]} intensity={1} distance={50} color="#fbbf24" castShadow />
@@ -47,7 +56,7 @@ export function MapMine() {
         <CuboidCollider args={[MAP_SIZE / 2, 0.5, MAP_SIZE / 2]} />
         <mesh receiveShadow position={[0, 0.5, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[MAP_SIZE, MAP_SIZE]} />
-          <EnvironmentMaterial textureName="brown_mud_dry" repeat={MAP_SIZE / 4} color="#78350f" />
+          <TextureMaterial textureName="brown_mud_dry" repeat={[MAP_SIZE / 4, MAP_SIZE / 4]} color="#78350f" />
         </mesh>
       </RigidBody>
 

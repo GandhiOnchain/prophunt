@@ -5,7 +5,12 @@ import { motion, AnimatePresence } from 'motion/react';
 import { safeRequestPointerLock } from './utils';
 
 export default function Chat() {
-  const { chatMessages, addChatMessage, gamePhase, propBots, isHunter, setIsChatFocused } = useGameStore();
+  const chatMessages = useGameStore(state => state.chatMessages);
+  const addChatMessage = useGameStore(state => state.addChatMessage);
+  const gamePhase = useGameStore(state => state.gamePhase);
+  const propBots = useGameStore(state => state.propBots);
+  const isHunter = useGameStore(state => state.isHunter);
+  const setIsChatFocused = useGameStore(state => state.setIsChatFocused);
   const [isOpen, setIsOpen] = useState(false);
   const [inputText, setInputText] = useState('');
   const [isFocused, setIsFocused] = useState(false);

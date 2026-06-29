@@ -1,34 +1,40 @@
 import React, { forwardRef, Suspense, useMemo } from 'react';
 import { useGLTF } from '@react-three/drei';
-import { DefaultLoadingManager } from 'three';
+import { DefaultLoadingManager, LoadingManager } from 'three';
+import { fixPolyHavenUrl } from './SafeTexture';
 
-// Fix Poly Haven's relative texture paths
+// Fix Poly Haven't relative texture paths and route via direct DL domain
+const configureLoader = (loader: any) => {
+  const manager = new LoadingManager();
+  manager.setURLModifier((url: string) => {
+    return fixPolyHavenUrl(url);
+  });
+  loader.manager = manager;
+};
+
 DefaultLoadingManager.setURLModifier((url) => {
-  if (url.includes('dl.polyhaven.org') && url.includes('/textures/')) {
-    return url.replace('dl.polyhaven.org', 'textures.polyhaven.net').replace('/gltf/', '/jpg/').replace('/textures/', '/');
-  }
-  return url;
+  return fixPolyHavenUrl(url);
 });
 
 // CC0 High Quality Assets from Poly Haven (1k GLTF versions for fast loading)
 const ASSETS = {
-  barrel: 'https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/Barrel_01/Barrel_01_1k.gltf',
-  chair: 'https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/WoodenChair_01/WoodenChair_01_1k.gltf',
-  box: 'https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/cardboard_box_01/cardboard_box_01_1k.gltf',
-  pot: 'https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/brass_pot_02/brass_pot_02_1k.gltf',
-  cabinet: 'https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/GothicCabinet_01/GothicCabinet_01_1k.gltf',
-  sofa: 'https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/ArmChair_01/ArmChair_01_1k.gltf',
-  desk: 'https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/WoodenTable_02/WoodenTable_02_1k.gltf',
+  barrel: fixPolyHavenUrl('https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/wine_barrel_01/wine_barrel_01_1k.gltf'),
+  chair: fixPolyHavenUrl('https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/dining_chair_02/dining_chair_02_1k.gltf'),
+  box: fixPolyHavenUrl('https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/cardboard_box_01/cardboard_box_01_1k.gltf'),
+  pot: fixPolyHavenUrl('https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/brass_pot_02/brass_pot_02_1k.gltf'),
+  cabinet: fixPolyHavenUrl('https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/vintage_cabinet_01/vintage_cabinet_01_1k.gltf'),
+  sofa: fixPolyHavenUrl('https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/sofa_03/sofa_03_1k.gltf'),
+  desk: fixPolyHavenUrl('https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/wooden_table_02/wooden_table_02_1k.gltf'),
   plant: 'https://raw.githubusercontent.com/pmndrs/market-assets/main/files/models/plant/model.gltf',
   mug: 'https://raw.githubusercontent.com/pmndrs/market-assets/main/files/models/mug/model.gltf',
 };
 
 // Pre-fetch
-Object.values(ASSETS).forEach(url => useGLTF.preload(url));
+Object.values(ASSETS).forEach(url => useGLTF.preload(url, true, true, configureLoader));
 
 const GLTFModel = forwardRef<any, { url: string; scale?: number; offsetY?: number; rotationOffset?: [number, number, number] }>(
   ({ url, scale = 1, offsetY = 0, rotationOffset = [0, 0, 0] }, ref) => {
-    const { scene } = useGLTF(url);
+    const { scene } = useGLTF(url, true, true, configureLoader);
     const clone = useMemo(() => {
       const c = scene.clone();
       c.traverse((child: any) => {

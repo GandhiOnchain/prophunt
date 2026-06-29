@@ -2,20 +2,197 @@ import { useState, useEffect } from 'react';
 import { ErrorBoundary } from './ErrorBoundary';
 import { GameScene } from './GameScene';
 import { useGameStore } from '../store/gameStore';
-import { ArrowLeft, Wifi, ShieldAlert, Heart } from 'lucide-react';
+import { ArrowLeft, Wifi, ShieldAlert, Heart, Lock, Unlock, RotateCw, Radio } from 'lucide-react';
 import { PROP_TYPES } from './game/PropModels';
 import { isInsideWall, getGroundHeight, safeRequestPointerLock, MAP_SIZE } from './game/utils';
 import Chat from './game/Chat';
 import { motion, AnimatePresence } from 'motion/react';
 
+// Highly optimized Tactical Radar sub-component that only re-renders on player/bot position changes
+interface TacticalRadarProps {
+  showRadar: boolean;
+  isHunter: boolean;
+}
+
+function TacticalRadar({ showRadar, isHunter }: TacticalRadarProps) {
+  const playerPosition = useGameStore(state => state.playerPosition);
+  const hunterBots = useGameStore(state => state.hunterBots);
+  const ghostPosition = useGameStore(state => state.ghostPosition);
+  const isLocked = useGameStore(state => state.isLocked);
+  const currentMapId = useGameStore(state => state.currentMapId);
+
+  return (
+    <AnimatePresence>
+      {!isHunter && showRadar && (
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95, y: -10 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: -10 }}
+          transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+          className="relative bg-zinc-950/80 backdrop-blur-md border border-zinc-800/80 p-2 rounded-xl shadow-2xl flex flex-col items-center"
+        >
+          <div className="relative w-40 h-40 border border-cyan-500/10 rounded-lg overflow-hidden bg-zinc-950/90">
+            {/* Grid line background overlay */}
+            <div className="absolute inset-0 bg-[linear-gradient(to_right,#0ea5e90a_1px,transparent_1px),linear-gradient(to_bottom,#0ea5e90a_1px,transparent_1px)] bg-[size:10px_10px]" />
+            
+            <svg viewBox="0 0 100 100" className="w-full h-full opacity-75">
+              {/* Outer boundary lines */}
+              <rect x="5" y="5" width="90" height="90" fill="none" stroke="#0ea5e9" strokeWidth="0.5" strokeDasharray="2,2" />
+              
+              {/* Central Stucco Partition Walls */}
+              <line x1="33" y1="20" x2="33" y2="80" stroke="#0ea5e9" strokeWidth="0.75" />
+              <line x1="67" y1="20" x2="67" y2="80" stroke="#0ea5e9" strokeWidth="0.75" />
+              
+              {/* Boxwood hedge boundaries */}
+              <line x1="5" y1="65" x2="33" y2="65" stroke="#10b981" strokeWidth="0.75" strokeDasharray="1,1" />
+              <line x1="67" y1="35" x2="95" y2="35" stroke="#10b981" strokeWidth="0.75" strokeDasharray="1,1" />
+              
+              {/* Elevated stone terraces */}
+              <rect x="67" y="65" width="20" height="20" fill="none" stroke="#3b82f6" strokeWidth="0.5" strokeDasharray="1,2" />
+              <rect x="13" y="15" width="20" height="20" fill="none" stroke="#3b82f6" strokeWidth="0.5" strokeDasharray="1,2" />
+              
+              {/* Greek Pedestal centerpiece vase anchor */}
+              <circle cx="50" cy="50" r="6" fill="none" stroke="#f59e0b" strokeWidth="0.75" />
+              <circle cx="50" cy="50" r="1.5" fill="#f59e0b" />
+
+              {/* Patrolling Hunter Bots (moving red dots) */}
+              {hunterBots.map((h) => {
+                const halfSize = MAP_SIZE / 2;
+                const mapX = 50 + (h.position[0] / halfSize) * 40;
+                const mapZ = 50 + (h.position[2] / halfSize) * 40;
+                return (
+                  <g key={h.id}>
+                    {/* Core blinking blip point */}
+                    <circle 
+                      cx={mapX} 
+                      cy={mapZ} 
+                      r="2.2" 
+                      fill="#ef4444" 
+                      className="animate-pulse"
+                    />
+                  </g>
+                );
+              })}
+
+              {/* Gray dot (ghost spectator) first, so it's under the green dot in SVG draw order */}
+              {isLocked && ghostPosition && (() => {
+                const halfSize = MAP_SIZE / 2;
+                const ghostX = 50 + (ghostPosition[0] / halfSize) * 40;
+                const ghostZ = 50 + (ghostPosition[2] / halfSize) * 40;
+                return (
+                  <g>
+                    {/* Core static, vivid gray blip point with dark frame */}
+                    <circle 
+                      cx={ghostX} 
+                      cy={ghostZ} 
+                      r="2.5" 
+                      fill="#cbd5e1" 
+                      stroke="#475569"
+                      strokeWidth="0.5"
+                    />
+                  </g>
+                );
+              })()}
+
+              {/* Local player position tracker blip (green for Prop) - second, drawn on top */}
+              {(() => {
+                const halfSize = MAP_SIZE / 2;
+                const playerX = 50 + (playerPosition[0] / halfSize) * 40;
+                const playerZ = 50 + (playerPosition[2] / halfSize) * 40;
+                return (
+                  <g>
+                    {/* Core static, vivid green blip point with white outer stroke */}
+                    <circle 
+                      cx={playerX} 
+                      cy={playerZ} 
+                      r="2.8" 
+                      fill="#4ade80" 
+                      stroke="#ffffff"
+                      strokeWidth="0.75"
+                    />
+                  </g>
+                );
+              })()}
+            </svg>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+// Highly optimized Disguise Dashboard sub-component that only re-renders on prop transform/rotation changes
+function DisguiseDashboard() {
+  const playerPropType = useGameStore(state => state.playerPropType);
+  const isLocked = useGameStore(state => state.isLocked);
+  const propRotationOffset = useGameStore(state => state.propRotationOffset);
+
+  return (
+    <div className="bg-zinc-950/85 backdrop-blur-md border border-zinc-800/80 p-3 rounded-xl shadow-2xl flex flex-col space-y-2.5 min-w-[210px] font-mono text-left">
+      <div className="flex items-center justify-between border-b border-zinc-800/60 pb-1.5">
+        <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">DISGUISE INTERFACE</span>
+        <span className="flex h-2 w-2 rounded-full bg-purple-500 animate-pulse" />
+      </div>
+      <div className="flex flex-col space-y-1">
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-zinc-500">DISGUISE:</span>
+          <span className="text-white font-bold">{playerPropType.toUpperCase()}</span>
+        </div>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-zinc-500">STEALTH LOCK:</span>
+          <span className={`font-bold flex items-center space-x-1 text-xs ${isLocked ? 'text-emerald-400' : 'text-amber-500'}`}>
+            {isLocked ? (
+              <>
+                <Lock size={10} className="mr-0.5" />
+                <span>LOCKED (GHOST)</span>
+              </>
+            ) : (
+              <>
+                <Unlock size={10} className="mr-0.5" />
+                <span>UNLOCKED</span>
+              </>
+            )}
+          </span>
+        </div>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-zinc-500">YAW DELTA:</span>
+          <span className="text-zinc-300 font-bold flex items-center">
+            <RotateCw size={10} className="mr-1 text-zinc-500" />
+            {Math.round((propRotationOffset * 180) / Math.PI) % 360}°
+          </span>
+        </div>
+        <div className="flex items-center justify-between text-xs border-t border-zinc-800/40 pt-1.5 mt-0.5">
+          <span className="text-zinc-500">TAUNT FEED:</span>
+          <span className="text-purple-400 font-bold flex items-center">
+            <Radio size={10} className="mr-1 animate-pulse" />
+            [F] KEY READY
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function GameArea() {
-  const { 
-    setView, isHunter, score, addScore, walletAddress, hp, setHp, 
-    gamePhase, setGamePhase, gameOverMessage, setGameOver,
-    propBots, initPropBots, isLocked, hitMarker, isChatFocused,
-    clearChat, playerPosition, hunterBots, initHunterBots, ghostPosition,
-    currentMapId
-  } = useGameStore();
+  const setView = useGameStore(state => state.setView);
+  const isHunter = useGameStore(state => state.isHunter);
+  const score = useGameStore(state => state.score);
+  const addScore = useGameStore(state => state.addScore);
+  const hp = useGameStore(state => state.hp);
+  const setHp = useGameStore(state => state.setHp);
+  const gamePhase = useGameStore(state => state.gamePhase);
+  const setGamePhase = useGameStore(state => state.setGamePhase);
+  const gameOverMessage = useGameStore(state => state.gameOverMessage);
+  const setGameOver = useGameStore(state => state.setGameOver);
+  const initPropBots = useGameStore(state => state.initPropBots);
+  const initHunterBots = useGameStore(state => state.initHunterBots);
+  const hitMarker = useGameStore(state => state.hitMarker);
+  const isChatFocused = useGameStore(state => state.isChatFocused);
+  const clearChat = useGameStore(state => state.clearChat);
+  const currentMapId = useGameStore(state => state.currentMapId);
+
+  // Memoized, stable select queries to prevent high frequency re-renders
+  const aliveBotsCount = useGameStore(state => state.propBots.filter(b => !b.isDead).length);
   
   const [timeLeft, setTimeLeft] = useState(30);
   const [isPointerLocked, setIsPointerLocked] = useState(false);
@@ -96,13 +273,12 @@ export default function GameArea() {
     }
 
     if (isHunter && gamePhase === 'HUNTING') {
-      const aliveBots = propBots.filter(b => !b.isDead).length;
-      if (aliveBots === 0) {
+      if (aliveBotsCount === 0) {
         setGameOver('All Props Eliminated! Hunters Win.');
         addScore(1000);
       }
     }
-  }, [hp, propBots, isHunter, gamePhase]);
+  }, [hp, aliveBotsCount, isHunter, gamePhase]);
 
   // Hitmarker Effect
   useEffect(() => {
@@ -143,8 +319,6 @@ export default function GameArea() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isChatFocused]);
 
-  const aliveBotsCount = propBots.filter(b => !b.isDead).length;
-
   return (
     <div className="relative w-full h-full bg-zinc-950 animate-in fade-in duration-1000">
       
@@ -179,25 +353,25 @@ export default function GameArea() {
         {/* Row for Vitals (only if Prop) and Time left */}
         <div className="flex items-center space-x-2 self-end">
           {/* Compact, High-contrast Health panel */}
-          {!isHunter && (
-            <div className="bg-zinc-950/80 backdrop-blur-md border border-zinc-800/80 p-2 rounded-lg shadow-2xl w-[110px] h-[60px] flex flex-col justify-between text-left">
-              <div className="flex items-center justify-between">
-                <span className="text-[8px] text-zinc-500 font-mono uppercase tracking-wider leading-none">VITALS</span>
-                <span className="flex h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse" />
-              </div>
-              <div className="flex items-center space-x-1.5 leading-none">
-                <Heart size={12} fill="currentColor" className="text-rose-400" />
-                <span className="font-mono text-sm font-black text-white leading-none">{Math.max(0, hp)}</span>
-              </div>
-              {/* Visual health slider bar */}
-              <div className="w-full bg-zinc-900 h-1 rounded-full overflow-hidden border border-zinc-800/50">
-                <div 
-                  className={`h-full transition-all duration-300 ${hp > 50 ? 'bg-emerald-500' : hp > 25 ? 'bg-amber-500' : 'bg-rose-500 animate-pulse'}`}
-                  style={{ width: `${Math.max(0, Math.min(100, hp))}%` }}
-                />
-              </div>
+          <div className="bg-zinc-950/80 backdrop-blur-md border border-zinc-800/80 p-2 rounded-lg shadow-2xl w-[110px] h-[60px] flex flex-col justify-between text-left">
+            <div className="flex items-center justify-between">
+              <span className="text-[8px] text-zinc-500 font-mono uppercase tracking-wider leading-none">
+                {isHunter ? 'FEEDBACK CORE' : 'VITALS'}
+              </span>
+              <span className={`flex h-1.5 w-1.5 rounded-full ${isHunter ? 'bg-rose-500 animate-pulse' : 'bg-emerald-500 animate-pulse'}`} />
             </div>
-          )}
+            <div className="flex items-center space-x-1.5 leading-none">
+              <Heart size={12} fill="currentColor" className={isHunter ? "text-rose-400" : "text-emerald-400"} />
+              <span className="font-mono text-sm font-black text-white leading-none">{Math.max(0, hp)}</span>
+            </div>
+            {/* Visual health slider bar */}
+            <div className="w-full bg-zinc-900 h-1 rounded-full overflow-hidden border border-zinc-800/50">
+              <div 
+                className={`h-full transition-all duration-300 ${isHunter ? 'bg-rose-500' : hp > 50 ? 'bg-emerald-500' : hp > 25 ? 'bg-amber-500' : 'bg-rose-500 animate-pulse'}`}
+                style={{ width: `${Math.max(0, Math.min(100, hp))}%` }}
+              />
+            </div>
+          </div>
 
           {/* Phase/Time Indicator Panel */}
           <div className="bg-zinc-950/80 backdrop-blur-md border border-zinc-800/80 p-2 rounded-lg text-center w-[110px] h-[60px] shadow-2xl flex flex-col justify-between">
@@ -218,106 +392,11 @@ export default function GameArea() {
         </div>
 
         {/* Tactical Sweeping Radar/Mini-map */}
-        <AnimatePresence>
-          {!isHunter && showRadar && (
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: -10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: -10 }}
-              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-              className="relative bg-zinc-950/80 backdrop-blur-md border border-zinc-800/80 p-2 rounded-xl shadow-2xl flex flex-col items-center"
-            >
-              <div className="relative w-40 h-40 border border-cyan-500/10 rounded-lg overflow-hidden bg-zinc-950/90">
-                {/* Grid line background overlay */}
-                <div className="absolute inset-0 bg-[linear-gradient(to_right,#0ea5e90a_1px,transparent_1px),linear-gradient(to_bottom,#0ea5e90a_1px,transparent_1px)] bg-[size:10px_10px]" />
-                
-                <svg viewBox="0 0 100 100" className="w-full h-full opacity-75">
-                  {/* Outer boundary lines */}
-                  <rect x="5" y="5" width="90" height="90" fill="none" stroke="#0ea5e9" strokeWidth="0.5" strokeDasharray="2,2" />
-                  
-                  {/* Central Stucco Partition Walls */}
-                  <line x1="33" y1="20" x2="33" y2="80" stroke="#0ea5e9" strokeWidth="0.75" />
-                  <line x1="67" y1="20" x2="67" y2="80" stroke="#0ea5e9" strokeWidth="0.75" />
-                  
-                  {/* Boxwood hedge boundaries */}
-                  <line x1="5" y1="65" x2="33" y2="65" stroke="#10b981" strokeWidth="0.75" strokeDasharray="1,1" />
-                  <line x1="67" y1="35" x2="95" y2="35" stroke="#10b981" strokeWidth="0.75" strokeDasharray="1,1" />
-                  
-                  {/* Elevated stone terraces */}
-                  <rect x="67" y="65" width="20" height="20" fill="none" stroke="#3b82f6" strokeWidth="0.5" strokeDasharray="1,2" />
-                  <rect x="13" y="15" width="20" height="20" fill="none" stroke="#3b82f6" strokeWidth="0.5" strokeDasharray="1,2" />
-                  
-                  {/* Greek Pedestal centerpiece vase anchor */}
-                  <circle cx="50" cy="50" r="6" fill="none" stroke="#f59e0b" strokeWidth="0.75" />
-                  <circle cx="50" cy="50" r="1.5" fill="#f59e0b" />
-    
-                  {/* Patrolling Hunter Bots (moving red dots) */}
-                  {hunterBots.map((h, idx) => {
-                    const halfSize = MAP_SIZE / 2;
-                    const mapX = 50 + (h.position[0] / halfSize) * 40;
-                    const mapZ = 50 + (h.position[2] / halfSize) * 40;
-                    return (
-                      <g key={h.id}>
-                        {/* Core blinking blip point */}
-                        <circle 
-                          cx={mapX} 
-                          cy={mapZ} 
-                          r="2.2" 
-                          fill="#ef4444" 
-                          className="animate-pulse"
-                        />
-                      </g>
-                    );
-                  })}
-
-                  {/* Gray dot (ghost spectator) first, so it's under the green dot in SVG draw order */}
-                  {isLocked && ghostPosition && (() => {
-                    const halfSize = MAP_SIZE / 2;
-                    const ghostX = 50 + (ghostPosition[0] / halfSize) * 40;
-                    const ghostZ = 50 + (ghostPosition[2] / halfSize) * 40;
-                    return (
-                      <g>
-                        {/* Core static, vivid gray blip point with dark frame */}
-                        <circle 
-                          cx={ghostX} 
-                          cy={ghostZ} 
-                          r="2.5" 
-                          fill="#cbd5e1" 
-                          stroke="#475569"
-                          strokeWidth="0.5"
-                        />
-                      </g>
-                    );
-                  })()}
-    
-                  {/* Local player position tracker blip (green for Prop) - second, drawn on top */}
-                  {(() => {
-                    const halfSize = MAP_SIZE / 2;
-                    const playerX = 50 + (playerPosition[0] / halfSize) * 40;
-                    const playerZ = 50 + (playerPosition[2] / halfSize) * 40;
-                    return (
-                      <g>
-                        {/* Core static, vivid green blip point with white outer stroke */}
-                        <circle 
-                          cx={playerX} 
-                          cy={playerZ} 
-                          r="2.8" 
-                          fill="#4ade80" 
-                          stroke="#ffffff"
-                          strokeWidth="0.75"
-                        />
-                      </g>
-                    );
-                  })()}
-                </svg>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <TacticalRadar showRadar={showRadar} isHunter={isHunter} />
       </div>
 
-      {/* 6. Bottom Right Weapon Ledgers */}
-      {isHunter && (
+      {/* 6. Bottom Right Weapon or Prop Tactical Ledgers */}
+      {isHunter ? (
         <div className="absolute bottom-4 right-4 z-10 flex items-end space-x-3 pointer-events-none select-none">
           {/* Tactical Weapon Info */}
           <div className="bg-zinc-950/80 backdrop-blur-md border border-zinc-800/80 px-6 py-3 rounded-xl shadow-2xl flex items-center space-x-4 min-w-[190px]">
@@ -331,12 +410,18 @@ export default function GameArea() {
             </div>
             <div className="h-7 w-px bg-zinc-800" />
             <div className="flex flex-col items-center">
-              <span className="text-[9px] text-zinc-500 font-mono uppercase tracking-wider">AMMO</span>
-              <span className="text-lg font-black font-mono text-white">
-                10
+              <span className="text-[9px] text-zinc-500 font-mono uppercase tracking-wider">BATTERY</span>
+              <span className="text-lg font-black font-mono text-emerald-400">
+                100%
               </span>
             </div>
           </div>
+        </div>
+      ) : (
+        <div className="absolute bottom-4 right-4 z-10 flex flex-col space-y-2 pointer-events-none select-none">
+          {/* Tactical Prop Info Dashboard */}
+          <DisguiseDashboard />
+          <span className="text-[8px] text-right text-zinc-600 font-mono tracking-wider">SCROLL TO ROTATE PROP • RIGHT CLICK TO LOCK</span>
         </div>
       )}
 

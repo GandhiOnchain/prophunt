@@ -11,7 +11,7 @@ import MapSelector from './components/MapSelector';
 import { useGameStore } from './store/gameStore';
 
 export default function App() {
-  const { view } = useGameStore();
+  const view = useGameStore(state => state.view);
 
   return (
     <div className="w-screen h-screen bg-zinc-950 text-white overflow-hidden selection:bg-emerald-500/30">
