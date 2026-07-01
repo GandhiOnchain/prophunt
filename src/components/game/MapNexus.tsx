@@ -42,7 +42,7 @@ const TextureMaterial = ({ textureName, repeat = [1, 1], color = '#ffffff', roug
 export function MapNexus() {
   return (
     <>
-      <fog attach="fog" args={['#0f172a', 60, 200]} />
+      <fog attach="fog" args={['#0f172a', 60, 280]} />
       <Environment files="https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/dikhololo_night_1k.hdr" />
       <ambientLight intensity={0.4} color="#fed7aa" />
       

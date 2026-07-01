@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import * as THREE from 'three';
+import { getProceduralTexture } from './ProceduralTextures';
 
 export const POLYHAVEN_SLUGS = [
   'wine_barrel_01',
@@ -85,10 +86,37 @@ function loadAndCacheTexture(url: string): Promise<THREE.Texture> {
   return textureCache[url];
 }
 
+function parseTextureInfo(url: string): { name: string; type: 'diff' | 'nor' | 'rough' } | null {
+  if (!url) return null;
+  const knownNames = ['stone_brick_wall_001', 'mossy_marble_slab', 'coast_sand_01', 'brown_mud_dry', 'blue_metal_plate', 'tree_bark', 'fern_leaf', 'tree_leaves'];
+  const name = knownNames.find((n) => url.includes(n)) || 'default';
+
+  let type: 'diff' | 'nor' | 'rough' = 'diff';
+  if (url.includes('_nor_') || url.includes('_nor_gl_') || url.includes('_nor_dx_')) {
+    type = 'nor';
+  } else if (url.includes('_rough_')) {
+    type = 'rough';
+  }
+
+  return { name, type };
+}
+
 export function useSafeTexture(url: string) {
-  const [texture, setTexture] = useState<THREE.Texture | null>(null);
+  // Initialize with beautiful, instant procedural texture so the game is fully textured immediately
+  const initialTexture = useState(() => {
+    const info = parseTextureInfo(url);
+    return info ? getProceduralTexture(info.name, info.type) : null;
+  })[0];
+
+  const [texture, setTexture] = useState<THREE.Texture | null>(initialTexture);
   
   useEffect(() => {
+    const info = parseTextureInfo(url);
+    if (info && (info.name === 'mossy_marble_slab' || info.name === 'tree_bark' || info.name === 'fern_leaf' || info.name === 'tree_leaves')) {
+      // Purely procedural, bypass CDN loading completely
+      return;
+    }
+
     const fixedUrl = fixPolyHavenUrl(url);
     if (!fixedUrl) return;
 
@@ -104,7 +132,7 @@ export function useSafeTexture(url: string) {
         }
       })
       .catch((err) => {
-        console.error('useSafeTexture error:', fixedUrl, err);
+        console.warn('CDN texture loading failed, keeping gorgeous procedural fallback texture:', fixedUrl, err);
       });
 
     return () => {

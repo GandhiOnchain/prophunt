@@ -12,18 +12,26 @@ export interface ChatMessage {
   channel?: 'team' | 'global';
 }
 
-interface Bot {
+export interface PlayerState {
   id: string;
-  type: string;
+  name: string;
+  walletAddress: string | null;
+  isHunter: boolean;
   position: [number, number, number];
+  rotation: [number, number, number];
+  isLocked: boolean;
+  propRotationOffset: number;
+  activePropType: string;
+  hp: number;
+  score: number;
   isDead: boolean;
 }
 
 interface GameState {
   walletAddress: string | null;
   setWalletAddress: (address: string | null) => void;
-  view: 'LOGIN' | 'MENU' | 'PLAYING' | 'MARKETPLACE' | 'MAP_SELECT';
-  setView: (view: 'LOGIN' | 'MENU' | 'PLAYING' | 'MARKETPLACE' | 'MAP_SELECT') => void;
+  view: 'MENU' | 'PLAYING' | 'MAP_SELECT';
+  setView: (view: 'MENU' | 'PLAYING' | 'MAP_SELECT') => void;
   
   currentMapId: MapID;
   setMapId: (id: MapID) => void;
@@ -50,18 +58,23 @@ interface GameState {
   propRotationOffset: number;
   setPropRotationOffset: (offset: number | ((prev: number) => number)) => void;
 
-  // Bots
-  propBots: Bot[];
-  initPropBots: (bots: Bot[]) => void;
-  killPropBot: (id: string) => void;
+  // Player Info
+  playerId: string;
+  roomCode: string;
+  setRoomCode: (code: string) => void;
+  otherPlayers: { [id: string]: PlayerState };
+  setOtherPlayers: (players: { [id: string]: PlayerState }) => void;
+  updateOtherPlayer: (id: string, state: Partial<PlayerState>) => void;
+  removeOtherPlayer: (id: string) => void;
 
   playerPosition: [number, number, number];
   setPlayerPosition: (position: [number, number, number]) => void;
+  playerPositionRef: [number, number, number]; // Added to quickly query from hook ref
+  setPlayerPositionWithRef: (position: [number, number, number]) => void;
+  playerRotation: [number, number, number];
+  setPlayerRotation: (rotation: [number, number, number]) => void;
   ghostPosition: [number, number, number] | null;
   setGhostPosition: (position: [number, number, number] | null) => void;
-  hunterBots: { id: string; position: [number, number, number]; target: [number, number, number]; speed: number }[];
-  initHunterBots: (hunters: { id: string; position: [number, number, number]; target: [number, number, number]; speed: number }[]) => void;
-  updateHunterBotPosition: (id: string, position: [number, number, number], target: [number, number, number]) => void;
 
   // Visual Effects
   hitMarker: number;
@@ -75,15 +88,26 @@ interface GameState {
   setIsChatFocused: (focused: boolean) => void;
 }
 
-export const useGameStore = create<GameState>((set) => ({
+const generateId = () => 'p-' + Math.random().toString(36).substring(2, 11);
+
+export const useGameStore = create<GameState>((set, get) => ({
   walletAddress: null,
   setWalletAddress: (address) => set({ walletAddress: address }),
   
-  view: 'LOGIN',
+  view: 'MENU',
   setView: (view) => set({ view, hp: 100, gamePhase: 'WAITING', isLocked: false }),
   
   currentMapId: 'TEMPLE',
-  setMapId: (id) => set({ currentMapId: id }),
+  setMapId: (id) => {
+    // Determine a default prop for the selected map
+    let defaultProp = 'box';
+    if (id === 'TEMPLE') defaultProp = 'vase';
+    else if (id === 'LOST_MINE') defaultProp = 'barrel';
+    else if (id === 'BLUE_SANDS') defaultProp = 'box';
+    else if (id === 'NEXUS') defaultProp = 'monitor';
+    
+    set({ currentMapId: id, playerPropType: defaultProp });
+  },
   
   isHunter: true,
   setIsHunter: (isHunter) => set({ isHunter }),
@@ -92,45 +116,86 @@ export const useGameStore = create<GameState>((set) => ({
   addScore: (points) => set((state) => ({ score: state.score + points })),
   
   hp: 100,
-  setHp: (hp) => set((state) => ({ hp: typeof hp === 'function' ? hp(state.hp) : hp })),
+  setHp: (hp) => {
+    const nextHp = typeof hp === 'function' ? hp(get().hp) : hp;
+    set({ hp: nextHp });
+  },
   
   gamePhase: 'WAITING',
-  setGamePhase: (phase) => set({ gamePhase: phase }),
+  setGamePhase: (phase) => {
+    set({ gamePhase: phase });
+  },
   
   gameOverMessage: '',
-  setGameOver: (message) => set({ gamePhase: 'GAME_OVER', gameOverMessage: message }),
+  setGameOver: (message) => {
+    set({ gamePhase: 'GAME_OVER', gameOverMessage: message });
+  },
 
-  playerPropType: 'box',
-  setPlayerPropType: (type) => set({ playerPropType: type }),
+  playerPropType: 'vase', // Matches default TEMPLE map
+  setPlayerPropType: (type) => {
+    set({ playerPropType: type });
+  },
   
   isLocked: false,
-  setIsLocked: (locked) => set((state) => ({ isLocked: typeof locked === 'function' ? locked(state.isLocked) : locked })),
-  propRotationOffset: 0,
-  setPropRotationOffset: (offset) => set((state) => ({ propRotationOffset: typeof offset === 'function' ? offset(state.propRotationOffset) : offset })),
+  setIsLocked: (locked) => {
+    const nextLocked = typeof locked === 'function' ? locked(get().isLocked) : locked;
+    set({ isLocked: nextLocked });
+  },
 
-  propBots: [],
-  initPropBots: (bots) => set({ propBots: bots }),
-  killPropBot: (id) => set((state) => ({
-    propBots: state.propBots.map(b => b.id === id ? { ...b, isDead: true } : b)
+  propRotationOffset: 0,
+  setPropRotationOffset: (offset) => {
+    const nextOffset = typeof offset === 'function' ? offset(get().propRotationOffset) : offset;
+    set({ propRotationOffset: nextOffset });
+  },
+
+  // Player Info
+  playerId: generateId(),
+  roomCode: 'LOBBY',
+  setRoomCode: (code) => set({ roomCode: code.toUpperCase() }),
+  otherPlayers: {},
+  setOtherPlayers: (players) => set({ otherPlayers: players }),
+  updateOtherPlayer: (id, state) => set((prev) => ({
+    otherPlayers: {
+      ...prev.otherPlayers,
+      [id]: {
+        ...(prev.otherPlayers[id] || {
+          id,
+          name: id.substring(0, 8),
+          walletAddress: null,
+          isHunter: false,
+          position: [0, 0, 0],
+          rotation: [0, 0, 0],
+          isLocked: false,
+          propRotationOffset: 0,
+          activePropType: 'vase', // Matches default map TEMPLE
+          hp: 100,
+          score: 0,
+          isDead: false
+        }),
+        ...state
+      }
+    }
   })),
+  removeOtherPlayer: (id) => set((prev) => {
+    const updated = { ...prev.otherPlayers };
+    delete updated[id];
+    return { otherPlayers: updated };
+  }),
 
   playerPosition: [0, 1, 10],
+  playerPositionRef: [0, 1, 10],
   setPlayerPosition: (position) => set({ playerPosition: position }),
+  setPlayerPositionWithRef: (position) => set({ playerPosition: position, playerPositionRef: position }),
+  playerRotation: [0, 0, 0],
+  setPlayerRotation: (rotation) => set({ playerRotation: rotation }),
   ghostPosition: null,
   setGhostPosition: (position) => set({ ghostPosition: position }),
-  hunterBots: [],
-  initHunterBots: (hunters) => set({ hunterBots: hunters }),
-  updateHunterBotPosition: (id, position, target) => set((state) => ({
-    hunterBots: state.hunterBots.map(h => h.id === id ? { ...h, position, target } : h)
-  })),
 
   hitMarker: 0,
   triggerHitMarker: () => set((state) => ({ hitMarker: state.hitMarker + 1 })),
 
   chatMessages: [
-    { id: '1', sender: '0xGigaProp', text: 'Yo, is this lobby full?', timestamp: '14:29', role: 'PROP', channel: 'global' },
-    { id: '2', sender: '0xSlayer', text: 'Ready to hunt. Good luck hiders!', timestamp: '14:30', role: 'HUNTER', channel: 'global' },
-    { id: '3', sender: 'System', text: 'Welcome to the match! 5 players connected.', timestamp: '14:30', role: 'SYSTEM', channel: 'global' },
+    { id: '1', sender: 'System', text: 'Welcome to the match!', timestamp: '00:00', role: 'SYSTEM', channel: 'global' },
   ],
   addChatMessage: (text, sender = 'Player', role = 'SYSTEM', isPlayer = false, channel = 'global') => set((state) => {
     const now = new Date();
@@ -152,9 +217,7 @@ export const useGameStore = create<GameState>((set) => ({
   }),
   clearChat: () => set({
     chatMessages: [
-      { id: '1', sender: '0xGigaProp', text: 'Yo, is this lobby full?', timestamp: '14:29', role: 'PROP', channel: 'global' },
-      { id: '2', sender: '0xSlayer', text: 'Ready to hunt. Good luck hiders!', timestamp: '14:30', role: 'HUNTER', channel: 'global' },
-      { id: '3', sender: 'System', text: 'Welcome to the match! 5 players connected.', timestamp: '14:30', role: 'SYSTEM', channel: 'global' },
+      { id: '1', sender: 'System', text: 'Connected to multiplayer lobby.', timestamp: '00:00', role: 'SYSTEM', channel: 'global' },
     ]
   }),
   isChatFocused: false,

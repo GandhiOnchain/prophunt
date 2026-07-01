@@ -43,11 +43,21 @@ function HunterSpawnCage() {
 export function Level() {
   const currentMapId = useGameStore((state) => state.currentMapId);
 
-  // Spawn 120 environment props to populate our massive 140x140 map
+  // Spawn 75 environment props to populate our massive 250x250 map
   const props = useMemo(() => {
     const arr = [];
-    const seedTypes = PROP_TYPES;
-    for (let i = 0; i < 120; i++) {
+    
+    // Define map-specific props for realism and coherence
+    const mapSpecificProps: Record<string, typeof PROP_TYPES[number][]> = {
+      'TEMPLE': ['stone', 'pillar'],
+      'LOST_MINE': ['box', 'barrel', 'cabinet'],
+      'BLUE_SANDS': ['box', 'chair', 'plant'],
+      'NEXUS': ['monitor', 'vending', 'server', 'desk', 'sofa', 'mug', 'chair', 'cabinet']
+    };
+    
+    const seedTypes = mapSpecificProps[currentMapId] || PROP_TYPES;
+    
+    for (let i = 0; i < 75; i++) {
       const type = seedTypes[Math.floor(Math.random() * seedTypes.length)];
       let x = 0;
       let z = 0;

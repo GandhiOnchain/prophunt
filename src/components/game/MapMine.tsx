@@ -42,15 +42,15 @@ const TextureMaterial = ({ textureName, repeat = [1, 1], color = '#ffffff', roug
 export function MapMine() {
   return (
     <>
-      <fog attach="fog" args={['#18181b', 40, 150]} />
+      <fog attach="fog" args={['#18181b', 40, 250]} />
       <Environment files="https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/industrial_sunset_02_1k.hdr" />
       <ambientLight intensity={0.15} color="#fed7aa" />
       {/* Point lights for mine lamps */}
-      <pointLight position={[0, 10, 0]} intensity={1} distance={50} color="#fbbf24" castShadow />
-      <pointLight position={[30, 10, 30]} intensity={0.8} distance={40} color="#fbbf24" castShadow />
-      <pointLight position={[-30, 10, -30]} intensity={0.8} distance={40} color="#fbbf24" castShadow />
-      <pointLight position={[30, 10, -30]} intensity={0.8} distance={40} color="#fbbf24" castShadow />
-      <pointLight position={[-30, 10, 30]} intensity={0.8} distance={40} color="#fbbf24" castShadow />
+      <pointLight position={[0, 10, 0]} intensity={1.2} distance={55} color="#fbbf24" castShadow shadow-mapSize={[1024, 1024]} shadow-bias={-0.0005} />
+      <pointLight position={[30, 10, 30]} intensity={0.8} distance={40} color="#fbbf24" />
+      <pointLight position={[-30, 10, -30]} intensity={0.8} distance={40} color="#fbbf24" />
+      <pointLight position={[30, 10, -30]} intensity={0.8} distance={40} color="#fbbf24" />
+      <pointLight position={[-30, 10, 30]} intensity={0.8} distance={40} color="#fbbf24" />
 
       <RigidBody type="fixed" colliders={false} position={[0, -0.5, 0]}>
         <CuboidCollider args={[MAP_SIZE / 2, 0.5, MAP_SIZE / 2]} />

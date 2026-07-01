@@ -3,23 +3,36 @@ import { Physics } from '@react-three/rapier';
 import { Player } from './game/Player';
 import { Level } from './game/Level';
 import { Bots } from './game/Bots';
-import { memo, Suspense } from 'react';
+import { memo, Suspense, useEffect, useState } from 'react';
 import { EffectComposer, Bloom, N8AO, ToneMapping } from '@react-three/postprocessing';
 
 const CAMERA_SETTINGS = { fov: 60, near: 0.1, far: 1000 };
 
 export const GameScene = memo(function GameScene() {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      const isMobileDevice = window.innerWidth < 768 || navigator.hardwareConcurrency <= 4;
+      setIsMobile(isMobileDevice);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   return (
     <Canvas 
-      shadows 
+      shadows={!isMobile} 
       camera={CAMERA_SETTINGS} 
-      dpr={[1, 2]} 
-      performance={{ min: 0.5 }}
+      dpr={isMobile ? 1 : [1, 1.5]} 
+      performance={{ min: 0.65 }}
       gl={{ 
-        antialias: false,
+        antialias: !isMobile,
         stencil: false,
         depth: true,
-        powerPreference: 'high-performance'
+        powerPreference: 'high-performance',
+        precision: 'highp'
       }}
     >
       <color attach="background" args={['#0a0908']} />
@@ -30,15 +43,17 @@ export const GameScene = memo(function GameScene() {
           <Player />
         </Physics>
         
-        <EffectComposer enableNormalPass={false}>
-          <N8AO aoRadius={1} intensity={2} />
-          <Bloom 
-            intensity={0.5} 
-            luminanceThreshold={0.9} 
-            luminanceSmoothing={0.1} 
-            mipmapBlur 
-          />
-          <ToneMapping adaptive={true} />
+        <EffectComposer enableNormalPass={false} autoClear={false}>
+          {!isMobile && <N8AO aoRadius={1} intensity={1} />}
+          {!isMobile && (
+            <Bloom 
+              intensity={0.3} 
+              luminanceThreshold={0.9} 
+              luminanceSmoothing={0.1} 
+              mipmapBlur 
+            />
+          )}
+          <ToneMapping adaptive={false} />
         </EffectComposer>
       </Suspense>
     </Canvas>

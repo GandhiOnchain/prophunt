@@ -42,7 +42,7 @@ const TextureMaterial = ({ textureName, repeat = [1, 1], color = '#ffffff', roug
 export function MapBeach() {
   return (
     <>
-      <fog attach="fog" args={['#e0f2fe', 80, 250]} />
+      <fog attach="fog" args={['#e0f2fe', 80, 300]} />
       <Sky sunPosition={[120, 45, 80]} turbidity={0.08} rayleigh={0.25} inclination={0.6} azimuth={0.25} />
       <Environment files="https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/kiara_1_dawn_1k.hdr" />
       
@@ -52,7 +52,7 @@ export function MapBeach() {
         intensity={1.0} 
         color="#ffffff"
         castShadow 
-        shadow-mapSize={[1024, 1024]} 
+        shadow-mapSize={[2048, 2048]} 
         shadow-camera-left={-80} 
         shadow-camera-right={80} 
         shadow-camera-top={80} 
